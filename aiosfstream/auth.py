@@ -6,8 +6,7 @@ import json
 from typing import Optional, Tuple
 
 from aiocometd import AuthExtension
-from aiocometd.typing import JsonObject, JsonLoader, JsonDumper, Payload, \
-    Headers
+from aiocometd.typing import JsonObject, JsonLoader, JsonDumper, Payload, Headers
 from aiohttp import ClientSession
 from aiohttp.client_exceptions import ClientError
 
@@ -20,12 +19,18 @@ SANDBOX_TOKEN_URL = "https://test.salesforce.com/services/oauth2/token"
 
 # pylint: disable=too-many-instance-attributes
 
+
 class AuthenticatorBase(AuthExtension):
     """Abstract base class to serve as a base for implementing concrete
     authenticators"""
-    def __init__(self, sandbox: bool = False,
-                 json_dumps: JsonDumper = json.dumps,
-                 json_loads: JsonLoader = json.loads) -> None:
+
+    def __init__(
+        self,
+        sandbox: bool = False,
+        token_url_override=None,
+        json_dumps: JsonDumper = json.dumps,
+        json_loads: JsonLoader = json.loads,
+    ) -> None:
         """
         :param sandbox: Marks whether the authentication has to be done \
         for a sandbox org or for a production org
@@ -56,10 +61,14 @@ class AuthenticatorBase(AuthExtension):
         self.json_dumps = json_dumps
         #: Function for JSON deserialization
         self.json_loads = json_loads
+        #: value for override of TOKEN_URL
+        self._token_url_override = token_url_override
 
     @property
     def _token_url(self) -> str:
         """The URL that should be used for token requests"""
+        if self._token_url_override:
+            return self.token_url_override
         if self._sandbox:
             return SANDBOX_TOKEN_URL
         return TOKEN_URL
@@ -77,13 +86,16 @@ class AuthenticatorBase(AuthExtension):
         the method is called without authenticating first.
         """
         if self.token_type is None or self.access_token is None:
-            raise AuthenticationError("Unknown token_type and access_token "
-                                      "values. Method called without "
-                                      "authenticating first.")
+            raise AuthenticationError(
+                "Unknown token_type and access_token "
+                "values. Method called without "
+                "authenticating first."
+            )
         headers["Authorization"] = self.token_type + " " + self.access_token
 
-    async def incoming(self, payload: Payload,
-                       headers: Optional[Headers] = None) -> None:
+    async def incoming(
+        self, payload: Payload, headers: Optional[Headers] = None
+    ) -> None:
         pass
 
     async def authenticate(self) -> None:
@@ -117,16 +129,24 @@ class AuthenticatorBase(AuthExtension):
         occurs
         """
 
+
 # pylint: enable=too-many-instance-attributes
 # pylint: disable=too-many-arguments
 
 
 class PasswordAuthenticator(AuthenticatorBase):
     """Authenticator for using the OAuth 2.0 Username-Password Flow"""
-    def __init__(self, consumer_key: str, consumer_secret: str,
-                 username: str, password: str, sandbox: bool = False,
-                 json_dumps: JsonDumper = json.dumps,
-                 json_loads: JsonLoader = json.loads) -> None:
+
+    def __init__(
+        self,
+        consumer_key: str,
+        consumer_secret: str,
+        username: str,
+        password: str,
+        sandbox: bool = False,
+        json_dumps: JsonDumper = json.dumps,
+        json_loads: JsonLoader = json.loads,
+    ) -> None:
         """
         :param consumer_key: Consumer key from the Salesforce connected \
         app definition
@@ -141,9 +161,7 @@ class PasswordAuthenticator(AuthenticatorBase):
         :param json_loads: Function for JSON deserialization, the default is \
         :func:`json.loads`
         """
-        super().__init__(sandbox=sandbox,
-                         json_dumps=json_dumps,
-                         json_loads=json_loads)
+        super().__init__(sandbox=sandbox, json_dumps=json_dumps, json_loads=json_loads)
         #: OAuth2 client id
         self.client_id = consumer_key
         #: OAuth2 client secret
@@ -156,10 +174,12 @@ class PasswordAuthenticator(AuthenticatorBase):
     def __repr__(self) -> str:
         """Formal string representation"""
         cls_name = type(self).__name__
-        return f"{cls_name}(consumer_key={reprlib.repr(self.client_id)}," \
-               f"consumer_secret={reprlib.repr(self.client_secret)}, " \
-               f"username={reprlib.repr(self.username)}, " \
-               f"password={reprlib.repr(self.password)})"
+        return (
+            f"{cls_name}(consumer_key={reprlib.repr(self.client_id)},"
+            f"consumer_secret={reprlib.repr(self.client_secret)}, "
+            f"username={reprlib.repr(self.username)}, "
+            f"password={reprlib.repr(self.password)})"
+        )
 
     async def _authenticate(self) -> Tuple[int, JsonObject]:
         async with ClientSession(json_serialize=self.json_dumps) as session:
@@ -168,7 +188,7 @@ class PasswordAuthenticator(AuthenticatorBase):
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
                 "username": self.username,
-                "password": self.password
+                "password": self.password,
             }
             response = await session.post(self._token_url, data=data)
             response_data = await response.json(loads=self.json_loads)
@@ -177,10 +197,16 @@ class PasswordAuthenticator(AuthenticatorBase):
 
 class RefreshTokenAuthenticator(AuthenticatorBase):
     """Authenticator for using the OAuth 2.0 Refresh Token Flow"""
-    def __init__(self, consumer_key: str, consumer_secret: str,
-                 refresh_token: str, sandbox: bool = False,
-                 json_dumps: JsonDumper = json.dumps,
-                 json_loads: JsonLoader = json.loads) -> None:
+
+    def __init__(
+        self,
+        consumer_key: str,
+        consumer_secret: str,
+        refresh_token: str,
+        sandbox: bool = False,
+        json_dumps: JsonDumper = json.dumps,
+        json_loads: JsonLoader = json.loads,
+    ) -> None:
         """
         :param consumer_key: Consumer key from the Salesforce connected \
         app definition
@@ -196,9 +222,7 @@ class RefreshTokenAuthenticator(AuthenticatorBase):
         :param json_loads: Function for JSON deserialization, the default is \
         :func:`json.loads`
         """
-        super().__init__(sandbox=sandbox,
-                         json_dumps=json_dumps,
-                         json_loads=json_loads)
+        super().__init__(sandbox=sandbox, json_dumps=json_dumps, json_loads=json_loads)
         #: OAuth2 client id
         self.client_id = consumer_key
         #: OAuth2 client secret
@@ -209,9 +233,11 @@ class RefreshTokenAuthenticator(AuthenticatorBase):
     def __repr__(self) -> str:
         """Formal string representation"""
         cls_name = type(self).__name__
-        return f"{cls_name}(consumer_key={reprlib.repr(self.client_id)}," \
-               f"consumer_secret={reprlib.repr(self.client_secret)}, " \
-               f"refresh_token={reprlib.repr(self.refresh_token)})"
+        return (
+            f"{cls_name}(consumer_key={reprlib.repr(self.client_id)},"
+            f"consumer_secret={reprlib.repr(self.client_secret)}, "
+            f"refresh_token={reprlib.repr(self.refresh_token)})"
+        )
 
     async def _authenticate(self) -> Tuple[int, JsonObject]:
         async with ClientSession(json_serialize=self.json_dumps) as session:
@@ -219,10 +245,11 @@ class RefreshTokenAuthenticator(AuthenticatorBase):
                 "grant_type": "refresh_token",
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
-                "refresh_token": self.refresh_token
+                "refresh_token": self.refresh_token,
             }
             response = await session.post(self._token_url, data=data)
             response_data = await response.json(loads=self.json_loads)
             return response.status, response_data
+
 
 # pylint: enable=too-many-arguments
